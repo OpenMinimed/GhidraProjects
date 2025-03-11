@@ -8,27 +8,19 @@ import sys
 import socket
 from common import *
 
-SCRIPTS_DIR = "/home/marci/src/Diab/OpenGuardian/scripts"
 GDBSERVER = "/data/local/tmp/gdbserver_arm-eabi-linux_7.11" # on the device
 FRIDASERVER = "/data/local/tmp/frida-server-16.5.6-android-arm64" # on the device
 GDBCLIENT = "aarch64-linux-gnu-gdb"
 PORT = 6666
-
-FRIDA_SCRIPTS = [
-	"antiroot_final_boss.js",
-	"bypass_developer.js",
-	"minimed_keepalive.js",
-	"security_bypasses.js",
-	"hook_sake_internals.js",
-	"monitor.js"
-]
+PKG = "com.openguardian4.sakeproxy" 
 
 def main():
 	# try to soft close the app so that it may save the authentication data (to skip login at startup)
 	run_cmd("adb shell input keyevent KEYCODE_HOME")
-	time.sleep(1)
 	run_cmd(f"adb shell am kill {PKG}")
-	time.sleep(1)
+	#run_cmd(f"adb uninstall {PKG}")
+	#run_cmd(f"adb install '/home/marci/src/Diab/OpenGuardian/Sakeproxy/app/build/outputs/apk/release/app-armeabi-v7a-release-aligned-debugSigned.apk'")
+
 
 	# cleanup gadgets
 	run_cmd('adb shell su -c \'pkill -f "gdb*"\'')
@@ -38,27 +30,15 @@ def main():
 	#run_cmd('adb shell su -c \'echo 0 > /proc/sys/kernel/randomize_va_space\'')
 	
 	# start frida server
-	run_cmd(f'adb shell su -c "{FRIDASERVER}"', background=True)
+#	run_cmd(f'adb shell su -c "{FRIDASERVER}"', background=True)
 
 	# create frida client command
-	frida_cmd = f'frida -U -f {PKG}' # attach on USB
-	for script in FRIDA_SCRIPTS:
-		frida_cmd += f' -l {os.path.join(SCRIPTS_DIR, script)}'
-	log_location = os.path.join(os.path.abspath(os.path.dirname(__file__)), "last.log")
-	frida_cmd += f' -o {log_location}'
+	start_cmd = f'adb shell monkey -p {PKG} 1' 
+	run_cmd(start_cmd, background=True)
 	
-	# wait for frida server to start then start the client
-	time.sleep(1)
+	input("\nPRESS ENTER TO CONNECT WITH GDB!")
 
-	print(frida_cmd)
-	return
-
-	run_cmd(frida_cmd, background=True)
-	
-	
-	input("\nPRESS ENTER TO ATTACH GDB WHEN ON PAIRING SCREEN!")
-
-	pid = get_pid()
+	pid = get_pid(PKG)
 
 	# attach and forward the gdb port
 	gdbserver_cmd = f'{GDBSERVER} localhost:{PORT} --attach {pid}'
@@ -70,7 +50,10 @@ def main():
 	gdb_start_cmd = f'{GDBCLIENT} -q -ex "set architecture armv7" -ex "set debuginfod enabled off" -ex "target remote localhost:{PORT}"'
 	#gdb_start_cmd += f' -ex "set auto-solib-add 0" -ex "sharedlibrary {get_elf_location()}"'
 	
-	print(f"\nyou can attach using:\n{gdb_start_cmd}")
+	print(f"\nyou can attach using:\n{gdb_start_cmd}\n")
+
+	input("\nPRESS ENTER TO CONNECT WITH GDB!")
+
 	os.system(gdb_start_cmd)
 
 if __name__ == "__main__":
